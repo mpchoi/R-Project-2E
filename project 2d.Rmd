@@ -1,0 +1,277 @@
+---
+title: "Kairomone sequence alignment"
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
+---
+
+_____________________________________________________________________________________
+
+Scientific Question: How similar are the sequences of the kairomones-- chemical odors emitted by an animal-- released by a cat (Felis catus) and a rat (Rattus norvegicus), both predators to a mouse (Mus musculus)? 
+
+Background/Sources: Kairomones are odors released by an individual of a species and detected by an individual of a different species (Papes 2010). These odors benefit the recipient species but not the species emitting the odor. This is often utilized by prey species that, in the presence of a kairomone, will display risk assessment and avoidant behavior (Carvalho 2015). Kairomones exist as proteins as well as smaller compounds such as pyridines and uric acid (Brechbühl 2015). Kairomones can be detected by two major receptor classes, V1R and V2R, both found in the vomeronasal organ (Isogai 2011). Two kairomones have been identified to be detected by mice: the PGCL1 protein from rats and the Fel d 4 protein from cats, both of which are predators of the mouse and will be analyzed in this experiment. The PGCL1 gene and Fel d 4 gene were found through a BLAST search on accession numbers AAI05817.1 and NP_001009233.1 in the NCBI protein database and restricting the findings of the PGCL1 gene to only rats (Rattus norvegicus) and the Fel d 4 gene to only cats (Felis catus).
+
+_____________________________________________________________________________________
+
+Hypothesis: If mice typically respond similarly to cat and rats, then cats and rats must release kairomones with similar sequences.
+
+Method: Here we perform a pairwise sequence alignment and use an alignment plot to visualize the results of the sequence alignment. A p-value is also utilized to prove/disprove the hypothesis.
+
+_____________________________________________________________________________________
+
+Packages required:
+
+1) BioConductor: open software development for computational biology and bioinformatics, serves as repository for many bioinformatics packages, including Biostrings and DECIPHER
+
+2) seqinr: R package used for exploratory data analysis and data visualization for biological sequence (DNA and protein) data
+
+seqinr was used in this experiment to: 
+- read a fasta file
+- convert the vector of characters within a fasta file to a string and vice versa
+- generate a dot plot
+
+Other ways this package can be used:
+- choosebank(): choose a database to pull a fasta file from
+- comp(): find the complementary strand to a DNA sequence
+- a(): convert three letter amino acid code to one letter code
+
+3) Biostrings: Bioconductor package used for manipulation of large biological sequences or sets of sequences
+
+Biostrings was used in this experiment to:
+- read in a fasta file
+- conduct a pairwise alignment
+- calculate percent sequence identity
+
+Other ways this package can be used:
+- XStringSet(): read a fasta file into a string object in desired format (DNA, RNA, AA)
+- findPalindromes(): find palindromic repeats within a sequence
+
+4) DECIPHER: Bioconductor package, toolset for deciphering and managing biological sequences
+
+DECIPHER was used in this experiment to:
+- generate an alignment plot
+
+Other ways this package can be used:
+- AmplifyDNA(): run a PCR simulation of a DNA sequence
+- IdentifyByRank(): sort individuals by levels of taxonomic rank
+
+5) msa: Bioconductor package designed for multiple sequence alignment with various algorithms
+
+msa was used in this experiment to:
+- run a multiple sequence alignment with a negative control
+
+Other ways this package can be used:
+- pretty print multiple sequence alignment
+
+6) ape: R package for reading, writing, manipulating, analysing, and simulating phylogenetic trees
+
+ape was used in this experiment to:
+- generate a phylogenetic tree from the multiple sequence alignment
+
+Other ways this package can be used:
+- computing DNA distances
+- translating DNA into AA
+
+Installing/Loading packages:
+
+```{r}
+library(seqinr)
+library(Biostrings)
+library(DECIPHER)
+library(msa)
+library(ape)
+```
+
+_____________________________________________________________________________________
+
+Below, this code is responsible for loading in a fasta file for the proteins associated with AAI05817.1 (PGCL1) and NP_001009233.1 (Fel d 4). This is just so that we can visualize the sequence in the R script.
+
+```{r}
+# Load the FASTA file
+rat <- read.fasta("PGCL1.fasta")
+cat <- read.fasta("Feld4.fasta")
+# Read the sequence contained within the file
+ratseq <- rat[[1]]
+catseq <- cat[[1]]
+# Print out the sequence
+ratseq
+catseq
+```
+
+_____________________________________________________________________________________
+
+This set of codes will standardize the sequences derived from the FASTA files.
+
+```{r}
+# Convert the vector of characters into a single string
+ratseqstring <- c2s(ratseq)
+catseqstring <- c2s(catseq)
+# Translate characters within the string to uppercase which is required for a pairwise alignment
+ratseqstringupper <- toupper(ratseqstring)
+catseqstringupper <- toupper(catseqstring)
+# Print out newly created string
+ratseqstringupper
+catseqstringupper
+```
+
+This set of codes will perform the pairwise sequence alignment and return a score and percent sequence identity. The bioinformatics method of a pairwise sequence alignment is used to compare two sequences to infer regions of similarity that may indicate functional, structural and/or evolutionary relationships. A score will accompany the pairwise alignment, and a higher score will usually correlate with a stronger alignment which means the sequences are more similar. Two types of pairwise alignments exist: global and local. A global alignment looks at the entire length of both sequences to try to match them, while a local alignment looks at subregions of each sequence to match and works well for sequences that may have parts that are identical but the overall sequences vary largely in size. It should be noted that a global alignment is preferred in this experiment because the sequences are relatively the same length and have been previously identified as homologs as they induce the same response in prey (Polyanovsky 2011).
+
+```{r}
+# Load up the subsitution matrix. BLOSUM62 is used here because it is considered the standard scoring matrix; also, the sequences are relatively short and the matrix is not as sensitive as others (Pearson WR 2013).
+data(BLOSUM62)
+# Store the pairwise sequence alignment into a single object
+globalalignment <- pairwiseAlignment(ratseqstringupper, catseqstringupper, substitutionMatrix = BLOSUM62, gapOpening = 10, gapExtension = 0.5, scoreOnly = FALSE)
+# Create a function that allows easy visualization of the entire alignment (derived from https://a-little-book-of-r-for-bioinformatics.readthedocs.io/en/latest/src/chapter4.html#calculating-the-statistical-significance-of-a-pairwise-global-alignment)
+printPairwiseAlignment <- function(alignment, chunksize=60, returnlist=FALSE)
+  {
+# This function requires the Biostrings package
+     require(Biostrings)
+# Get the alignment for the first sequence
+     seq1aln <- pattern(alignment) 
+# Get the alignment for the second sequence
+     seq2aln <- subject(alignment) 
+# Find the number of columns in the alignment
+     alnlen  <- nchar(seq1aln)    
+     starts  <- seq(1, alnlen, by=chunksize)
+     n       <- length(starts)
+     seq1alnresidues <- 0
+     seq2alnresidues <- 0
+     for (i in 1:n) {
+        chunkseq1aln <- substring(seq1aln, starts[i], starts[i]+chunksize-1)
+        chunkseq2aln <- substring(seq2aln, starts[i], starts[i]+chunksize-1)
+# Find out how many gaps there are in chunkseq1aln:
+        gaps1 <- countPattern("-",chunkseq1aln) 
+# Find out how many gaps there are in chunkseq2aln:
+        gaps2 <- countPattern("-",chunkseq2aln) 
+# Calculate how many residues of the first sequence we have printed so far in the alignment:
+        seq1alnresidues <- seq1alnresidues + chunksize - gaps1
+# Calculate how many residues of the second sequence we have printed so far in the alignment:
+        seq2alnresidues <- seq2alnresidues + chunksize - gaps2
+        if (returnlist == 'FALSE')
+        {
+           print(paste(chunkseq1aln,seq1alnresidues))
+           print(paste(chunkseq2aln,seq2alnresidues))
+           print(paste(' '))
+        }
+     }
+     if (returnlist == 'TRUE')
+     {
+        vector1 <- s2c(substring(seq1aln, 1, nchar(seq1aln)))
+        vector2 <- s2c(substring(seq2aln, 1, nchar(seq2aln)))
+        mylist <- list(vector1, vector2)
+        return(mylist)
+     }
+}
+# Return the full pairwise sequence alignment in rows of 60 characters each
+printPairwiseAlignment(globalalignment, 60)
+# Print out the alignment score
+globalalignment
+# Print out the percent sequence identity
+pid(globalalignment)
+```
+
+_____________________________________________________________________________________
+
+This set of codes is responsible for the comparison of the two proteins with a third protein, XP_017195839.1, which is the negative control. This is known as major allergen I polypeptide chain 1-like and belongs to the rabbit (Oryctolagus cuniculus), an organism whose odor has been shown in previous studies to not induce any risk assessment or avoidance behavior by a mouse. 
+
+```{r}
+# Load in the fasta file for XP_017195839.1
+rabbit <- read.fasta("rabbit.fasta")
+# Read the sequence within the file
+rabbitseq <- rabbit [[1]]
+# Convert to a string
+rabbitseqstring <- c2s(rabbitseq)
+# Convert string to upper case
+rabbitseqstringupper <- toupper(rabbitseqstring)
+# Create an AAStringSet object
+msasequences <- c(ratseqstringupper, catseqstringupper, rabbitseqstringupper)
+msaseqstring <- AAStringSet(msasequences)
+# Run the multiple sequence alignment
+myfirstmsa <- msa(msaseqstring)
+# Print out alignment
+print(myfirstmsa, show = "complete")
+# Create a phylogenetic tree to show relative distances between proteins. Convert the msa object to the classes alignment available within the seqinr package
+myfirstmsa2 <- msaConvert(myfirstmsa, type = "seqinr::alignment")
+# Compute distance matrix
+d <- dist.alignment(myfirstmsa2, "identity")
+# Construct and print out phylogenetic tree
+tree <- nj(d)
+plot(tree, main="TREEEEEEE")
+# From both the multiple sequence alignment and the phlyogenetic tree, it is clear that sequence 3, belonging to the rabbit, is significantly distanced from the other proteins.
+```
+
+This set of codes allows for multiple different visualizations of the pairwise sequence alignment. A dot plot allows us to see regions of higher similarity, which will be characterized by a longer, more distinguished line down the diagonal of the graphic. The BrowseSeqs function allows for viewing the alignment plot as well as the consensus sequence that shows at which positions the sequences match.
+
+```{r}
+# Print out a dot plot 
+dotPlot(ratseq, catseq)
+# Store the alignment as a string
+seq <- c(alignedPattern(globalalignment), alignedSubject(globalalignment))
+# View the alignment plot and consensus sequence in a web browser
+BrowseSeqs(seq)
+```
+
+_____________________________________________________________________________________
+
+This set of codes will allow me to calculate the statistical significance of this alignment. I create a function that will generate 10,000 random sequences of the same length as the PGCL1 gene, and perform a pairwise sequence alignment between all 10,000 sequences and the Fel d 4 gene. This generates a score for each alignment; the number of scores that are higher than the real alignment score between PGCL1 and Fel d 4, divided by the number of random sequences generated (10,000), gives me the p value as this is the probability of a random sequence have a stronger alignment with Fel d 4 than PGCL1. 10,000 sequences were generated in order to obtain a large enough population to minimize the risk of standard error.
+
+```{r}
+generateSeqsWithMultinomialModel <- function(inputsequence, X){
+# Change the input sequence into a vector of letters
+# This function requires the SeqinR package    
+  require("seqinr") 
+     inputsequencevector <- s2c(inputsequence)
+# Find the frequencies of the letters in the input sequence "inputsequencevector":
+     mylength <- length(inputsequencevector)
+     mytable <- table(inputsequencevector)
+# Find the names of the letters in the sequence
+     letters <- rownames(mytable)
+     numletters <- length(letters)
+# Make a vector to store the probabilities of letters     
+     probabilities <- numeric() 
+     for (i in 1:numletters)
+     {
+        letter <- letters[i]
+        count <- mytable[[i]]
+        probabilities[i] <- count/mylength
+     }
+# Make X random sequences using the multinomial model with probabilities "probabilities"
+     seqs <- numeric(X)
+     for (j in 1:X)
+     {
+        seq <- sample(letters, mylength, rep=TRUE, prob=probabilities) 
+# Sample with replacement
+        seq <- c2s(seq)
+        seqs[j] <- seq
+     }
+# Return the vector of random sequences
+     return(seqs)
+  }
+# Generate random sequences
+randomseqs <- generateSeqsWithMultinomialModel(ratseqstringupper,10000)
+# Create a numeric vector with 10000 elements
+randomscores <- double(10000) 
+for (i in 1:10000)
+  {
+# Perform alignment between Fel d 4 and random sequences
+     score <- pairwiseAlignment(s4, randomseqs[i], substitutionMatrix = "BLOSUM62",
+       gapOpening = 10, gapExtension = 0.5, scoreOnly = TRUE)
+     randomscores[i] <- score
+  }
+# Sum up number of alignment scores higher than PGCL1/Fel d 4 alignment score. 
+sum(randomscores >= 510.5)
+# If you would like to, you can also print a histogram that shows the distribution of these theoretical scores.
+hist(randomscores, col="red")
+```
+
+_____________________________________________________________________________________
+
+From this experiment, we observed an alignment score of 510.5 between the PGCL1 and Fel d 4 genes, with a percent sequence identity of 57.14286%. To show whether the sequence similarities are statistically significant, we calculated a p-value of 0. It should be noted that 
+The sequences are significantly similar, and my hypothesis is correct! I infer that the implications of this would be that both kairomones, at the very least, bind to the same class of receptors within the vomeronasal organ which results in a lack of discrimination between the two predators by the mouse.
+
+
+
+
+
